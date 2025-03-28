@@ -1,0 +1,444 @@
+---
+---
+---
+
+# **Andriansah (23/519915/PA/22320)**
+
+## **Tugas 3 Pengantar Data Sains**
+
+# **Pemilihan Data**
+
+```{r}
+# Library
+library(titanic)
+library(ggplot2)
+library(dplyr)
+library(caret)
+library(ROSE)
+library(e1071)
+library(MASS)
+library(class)
+library(klaR)
+library(ROCR)
+```
+
+```{r}
+# Load Data Titanic
+data <- titanic::titanic_train
+head(data)
+```
+Dataset Titanic di R berasal dari data asli kapal Titanic yang tenggelam pada tahun 1912. Dataset ini digunakan untuk memprediksi peluang seseorang selamat berdasarkan informasi penumpang.
+
+Beberapa variabel utama yang digunakan untuk analisis klasifikasi yaitu sebagai berikut.
+
+Survived : Status selamat (1 = Ya, 0 = Tidak)
+
+Pclass : Kelas tiket penumpang (1 = Kelas 1, 2 = Kelas 2, 3 = Kelas 3)
+
+Sex : Jenis kelamin penumpang (male/female)
+
+Age : Umur penumpang
+
+SibSp : Jumlah saudara/kakak/adik/pasangan di kapal
+
+Parch : Jumlah orang tua/anak di kapal
+
+Fare : Harga tiket yang dibayar
+
+Embarked : Pelabuhan keberangkatan (C = Cherbourg, Q = Queenstown, S = Southampton)
+
+Tujuan dalam analisis klasifikasi yaitu untuk menentukan faktor yang paling berpengaruh terhadap keselamatan penumpang dan membangun model klasifikasi untuk memprediksi siapa yang mungkin selamat berdasarkan fitur-fitur tersebut.
+
+## **Deskripsi Variabel**
+
+```{r}
+str(data)
+```
+
+Dataset Titanic terdiri atas 12 variabel yaitu sebagai berikut.
+
+-   Variabel Respons: Survived (0 = Tidak Selamat, 1 = Selamat)
+
+-   Variabel Numerik: Age, Fare, SibSp, Parch
+
+-   Variabel Kategorik: Pclass, Sex, Embarked
+
+-   Variabel yang Tidak Relevan dalam Analisis Klasifikasi: PassengerId, Name, Ticket, dan Cabin
+
+## **Jumlah Observasi dalam Data Titanic**
+
+```{r}
+# Jumlah observasi dalam dataset
+num_obs <- nrow(data)
+cat("Jumlah observasi dalam dataset Titanic adalah", num_obs, "\n")
+```
+Jumlah observasi dalam dataset Titanic adalah 891 yang berarti bahwa dataset ini berisi data dari 891 penumpang kapal Titanic.
+
+## **Distribusi Variabel Kategorik pada Variabel Respons**
+
+```{r}
+# Distribusi kategori pada variabel respons (Survived)
+survived_table <- table(data$Survived)
+survived_prop <- prop.table(survived_table) * 100
+
+df_survived <- data.frame(
+  Kategori = c("Tidak Selamat (0)", "Selamat (1)"),
+  Jumlah = as.vector(survived_table),
+  Persentase = paste0(round(as.vector(survived_prop), 2), "%")
+)
+print(df_survived)
+```
+
+Terlihat bahwa terdapat ketidakseimbangan (imbalance) dalam variabel respons Survived memiliki proporsi sekitar 1.6 : 1 yang berarti bahwa perbandingkan data antar kelas tidak jauh berbeda, sehingga dalam melakukan analisis klasifikasi menggunakan Logistic Regression, LDA, dan Naïve Bayes nantinya tidak perlu dilakukan penanganan adanya data imbalance.
+
+## **Boxplot Harga Tiket (Fare) vs Kelangsungan Hidup**
+
+```{r}
+ggplot(data, aes(x = as.factor(Survived), y = Fare, fill = as.factor(Survived))) +
+  geom_boxplot() +
+  labs(title = "Boxplot Harga Tiket Berdasarkan Kelangsungan Hidup",
+       x = "Kelangsungan Hidup (0 = Tidak Selamat, 1 = Selamat)", 
+       y = "Harga Tiket", fill = "Kelangsungan Hidup") +
+  scale_fill_manual(values = c("salmon", "royalblue"),
+                    labels = c("Tidak Selamat", "Selamat"))
+```
+
+### **Interpretasi**
+
+Diperoleh output di atas yaitu boxplot harga tiker berdasarkan kelangsungan hidup penumpang terlihat bahwa terdapat adanya outlier harga tiket \> 50 untuk penumpang yang tidak selamat dan outlier harga tiket \> 125 untuk penumpang yang selamat sehingga dapat disimpulkan bahwa harga tiket penumpang kapal Titanic baik yang tidak selamat atau selamat tidak berdistribusi normal.
+
+## **Histogram Distribusi Umur Berdasarkan Kelangsungan Hidup**
+
+```{r}
+ggplot(data, aes(x = Age, fill = as.factor(Survived))) +
+  geom_histogram(binwidth = 5, alpha = 0.7, position = "identity") +
+  labs(title = "Distribusi Umur Berdasarkan Kelangsungan Hidup",
+       x = "Usia", y = "Jumlah Penumpang", fill = "Kelangsungan Hidup") +
+  scale_fill_manual(values = c("salmon", "royalblue"),
+                    labels = c("Tidak Selamat", "Selamat")) +
+  theme_minimal()
+```
+
+### **Interpretasi**
+
+Diperoleh output di atas yaitu histogram usia penumpang kapal Titanic terlihat bahwa penumpang yang berusia antara 20-40 tahun lebih banyak yang tidak selamat dibandingkan yang selamt, sedangkan penumpang yang berusia antara 0-10 tahun lebih banyak yang selamat dibandingkan yang tidak selamat. Oleh karena itu, dapat disimpulkan bahwa anak-anak memiliki peluang selamat lebih tinggi dibandingkan dewasa sehingga variabel Age merupakan variabel prediktor penting dalam analisis klasifikasi kelangsungan hidup di kapal Titanic.
+
+## **Scatterplot Umur vs Harga Tiket Berdasarkan Kelangsungan Hidup**
+
+```{r}
+ggplot(data, aes(x = Age, y = Fare, color = as.factor(Survived))) +
+  geom_point(alpha = 0.6) +
+  labs(title = "Scatterplot Usia vs Harga Tiket",
+       x = "Usia", y = "Harga Tiket", color = "Kelangsungan Hidup") +
+  scale_color_manual(values = c("red", "blue"),
+                     labels = c("Tidak Selamat", "Selamat"))
+```
+
+### **Interpretasi**
+
+Diperoleh output di atas yaitu scatter plot usia vs harga tiket terlihat bahwa penumpang dengan harga tiket yang lebih mahal cenderung memiliki peluang selamat lebih tinggi dibandingkan penumpang dengan harga tiket yang lebih murah yang mungkin disebabkan penumpang dengan harga tiket yang lebih mahal memiliki kelas kabin yang lebih baik dibandingkan penumpang dengan harga tiket yang lebih murah. Oleh karena itu, dapat disimpulkan bahwa usia tidak menunjukkan korelasi yang kuat dengan harga tiket, tetapi kombinasi faktor ini dapat membantu dalam klasifikasi kelangsungan hidup.
+
+### **Preprocessing Data**
+
+```{r}
+# Menghapus variabel yang tidak relevan dalam Analisis Klasifikasi
+data = data[,-c(1,4,9,11)]
+
+# Mengecek missing value
+colSums(is.na(data))
+```
+
+Berdasarkan hasil pengecekan missing value terlihat bahwa terdapat variabel Age yang memiliki missing value sehingga perlu dilakukan imputasi data.
+
+```{r}
+boxplot(data$Age)
+```
+
+Berdasarkan output boxplot di atas terlihat adanya outlier pada variabel Age yang berarti bahwa usia penumpang kapal Titanic tidak berdistribusi normal, maka dalam melakukan penanganan missing value pada variabel Age dapat menggunakan imputasi data median dari variabel Age.
+
+```{r}
+# Imputasi data pada variabel Age
+data$Age[is.na(data$Age)] <- median(data$Age, na.rm = TRUE)
+
+# Mengecek kembali missing value
+colSums(is.na(data))
+```
+
+Berdasarkan hasil pengecekan kembali missing value terlihat bahwa tidak terdapat variabel yang memiliki missing value sehingga dapat dilakukan ke tahap selanjutnya.
+
+```{r}
+# Mengubah variabel kategorik menjadi faktor
+data$Sex <- as.factor(data$Sex)
+data$Survived <- as.factor(data$Survived)
+data$Embarked <- as.factor(data$Embarked)
+```
+
+```{r}
+str(data)
+```
+
+Berdasarkan deskripsi variabel di atas terlihat bahwa variabel Embarked memiliki kategori " " atau kosong sehingga perlu dilakukan imputasi data dengan modus pada variabel Embarked.
+
+```{r}
+data$Embarked <- as.character(data$Embarked)
+modus_embarked <- names(sort(table(data$Embarked), decreasing = TRUE))[1]
+data$Embarked[data$Embarked == ""] <- modus_embarked
+```
+
+```{r}
+# Mengubah variabel kategorik menjadi faktor
+data$Sex <- as.factor(data$Sex)
+data$Survived <- as.factor(data$Survived)
+data$Embarked <- as.factor(data$Embarked)
+```
+
+```{r}
+str(data)
+```
+
+Berdasarkan deskripsi variabel di atas terlihat bahwa seluruh variabel tidak ada lagi missing value baik itu pada variabel numerik ataupun kategorik.
+
+```{r}
+# Memisahkan data menjadi 80% data latih dan 20% data uji
+set.seed(519915) # NIU Andriansah
+index <- createDataPartition(data$Survived, p = 0.8, list = FALSE)
+
+# Data latih
+train_data <- data[index, ]
+head(train_data)
+
+# Data uji
+test_data <- data[-index, ]
+head(test_data)
+```
+
+```{r}
+# Mengecek missing value
+colSums(is.na(train_data))
+colSums(is.na(test_data))
+```
+
+Berdasarkan hasil pengecekan missing value terlihat bahwa tidak terdapat variabel yang memiliki missing value baik itu pada data latih atau data uji sehingga dapat dilakukan ke tahap selanjutnya.
+
+# **Analisis Klafisikasi**
+
+## **Regresi Logistik**
+
+```{r}
+# Model Logistic Regression
+log_model <- glm(Survived ~ ., data = train_data, family = binomial)
+log_pred <- predict(log_model, test_data, type = "response")
+log_class <- ifelse(log_pred > 0.5, 1, 0)
+
+# Confusion Matrix
+log_cm <- confusionMatrix(factor(log_class), test_data$Survived)
+print(log_cm)
+```
+
+## **Linear Discriminant Analysis (LDA)**
+
+```{r}
+# Model LDA
+lda_model <- lda(Survived ~ ., data = train_data)
+lda_pred <- predict(lda_model, test_data)
+
+# Confusion Matrix
+lda_cm <- confusionMatrix(lda_pred$class, test_data$Survived)
+print(lda_cm)
+```
+
+## **Quadratic Discriminant Analysis (QDA)**
+
+```{r}
+# Model QDA
+qda_model <- qda(Survived ~ ., data = train_data)
+qda_pred <- predict(qda_model, test_data)
+
+# Confusion Matrix
+qda_cm <- confusionMatrix(qda_pred$class, test_data$Survived)
+print(qda_cm)
+```
+
+## **Naive Bayes**
+
+```{r}
+# Model Naive Bayes
+nb_model <- naiveBayes(Survived ~ ., data = train_data)
+nb_pred <- predict(nb_model, test_data)
+
+# Confusion Matrix
+nb_cm <- confusionMatrix(nb_pred, test_data$Survived)
+print(nb_cm)
+```
+
+## **k-Nearest Neighbors (KNN)**
+
+```{r}
+# Mengubah tipe data variabel kategorik menjadi numerik
+train_data$Sex <- as.numeric(factor(train_data$Sex))
+test_data$Sex <- as.numeric(factor(test_data$Sex))
+
+train_data$Embarked <- as.numeric(factor(train_data$Embarked))
+test_data$Embarked <- as.numeric(factor(test_data$Embarked))
+```
+
+```{r}
+# Menentukan nilai K terbaik untuk KNN
+k_values <- seq(1, 20, by = 1)
+accuracy <- numeric(length(k_values))
+
+# Loop untuk menghitung akurasi pada setiap nilai K
+for (i in seq_along(k_values)) {
+  pred_knn <- knn(train = train_data[, -1], test = test_data[, -1], 
+                   cl = train_data$Survived, k = k_values[i])
+  accuracy[i] <- mean(pred_knn == test_data$Survived)
+}
+
+# Mencari nilai K dengan akurasi tertinggi
+best_accuracy <- max(accuracy)
+best_k <- k_values[which.max(accuracy)]
+
+# Menampilkan hasil
+cat("Akurasi tertinggi:", best_accuracy, "\n")
+cat("Nilai K terbaik:", best_k, "\n")
+```
+
+Diperoleh nilai K terbaik agar model KNN memiliki akurasi tertinggi yaitu K = 5.
+
+```{r}
+# Model KNN dengan k optimal
+k_value <- best_k
+knn_pred <- knn(train = train_data[, -1], test = test_data[, -1], 
+                cl = train_data$Survived, k = k_value)
+
+# Confusion Matrix
+knn_cm <- confusionMatrix(knn_pred, test_data$Survived)
+print(knn_cm)
+```
+
+# **Metrik Evaluasi Model**
+
+```{r}
+# Memastikan variabel target "Survived" adalah faktor dengan level yang valid
+train_data$Survived <- factor(train_data$Survived, levels = c(0,1), labels = c("No", "Yes"))
+
+# Fungsi untuk evaluasi dengan 5-fold cross-validation
+evaluate_model <- function(model_fit, train_data, method) {
+  control <- trainControl(method = "cv", number = 5, classProbs = FALSE, summaryFunction = defaultSummary)
+
+  model <- train(Survived ~ ., data = train_data, method = method, trControl = control, metric = "Accuracy")
+  return(model)
+}
+
+# Fungsi untuk menghitung metrik evaluasi
+calculate_metrics <- function(model, train_data) {
+  predictions <- predict(model, train_data)
+  cm <- confusionMatrix(predictions, train_data$Survived)
+  metrics <- data.frame(
+    Model = deparse(substitute(model)),
+    Accuracy = cm$overall["Accuracy"],
+    Sensitivity = cm$byClass["Sensitivity"],
+    Specificity = cm$byClass["Specificity"]
+  )
+  return(metrics)
+}
+
+cat("\014")
+options(warn = -1) 
+
+# Regresi Logistik
+log_model <- evaluate_model(glm(Survived ~ ., data = train_data, family = binomial), train_data, "glm")
+log_metrics <- calculate_metrics(log_model, train_data)
+
+# Linear Discriminant Analysis (LDA)
+lda_model <- evaluate_model(lda(Survived ~ ., data = train_data), train_data, "lda")
+lda_metrics <- calculate_metrics(lda_model, train_data)
+
+# Quadratic Discriminant Analysis (QDA)
+qda_model <- evaluate_model(qda(Survived ~ ., data = train_data), train_data, "qda")
+qda_metrics <- calculate_metrics(qda_model, train_data)
+
+# Naive Bayes
+nb_model <- evaluate_model(naiveBayes(Survived ~ ., data = train_data), train_data, "nb")
+nb_metrics <- calculate_metrics(nb_model, train_data)
+
+# K-Nearest Neighbors (KNN) dengan k = 5
+knn_control <- trainControl(method = "cv", number = 5, classProbs = FALSE, summaryFunction = defaultSummary)
+knn_model <- train(Survived ~ ., data = train_data, method = "knn", trControl = knn_control, tuneGrid = data.frame(k = 5), metric = "Accuracy")
+knn_metrics <- calculate_metrics(knn_model, train_data)
+
+# Hasil metrik evaluasi
+metrics_df <- data.frame(
+  Model = c("Logistic Regression", "LDA", "QDA", "Naive Bayes", "KNN"),
+  Accuracy = c(log_metrics$Accuracy, lda_metrics$Accuracy, qda_metrics$Accuracy, nb_metrics$Accuracy, knn_metrics$Accuracy),
+  Sensitivity = c(log_metrics$Sensitivity, lda_metrics$Sensitivity, qda_metrics$Sensitivity, nb_metrics$Sensitivity, knn_metrics$Sensitivity),
+  Specificity = c(log_metrics$Specificity, lda_metrics$Specificity, qda_metrics$Specificity, nb_metrics$Specificity, knn_metrics$Specificity)
+)
+print(metrics_df)
+```
+
+## **Interpretasi**
+
+#### **Logistic Regression (Regresi Logistik)**
+
+Akurasi: 80.11% (Cukup baik)
+
+Sensitivitas: 85.23% (Bagus dalam menangkap kasus positif)
+
+Spesifisitas: 71.89% (Sedang)
+
+Kelebihan: Cocok untuk dataset Titanic karena banyak fitur bersifat kategorikal seperti Sex, Ticket, dan Embarked.
+
+Kekurangan: Bisa kurang fleksibel jika hubungan antara fitur dan target bersifat non-linier di mana perlu mengansumsikan hubungan linier antara fitur dan probabilitas selamat, yang bisa menjadi keterbatasan jika hubungan lebih kompleks.
+
+### **Linear Discriminant Analysis (LDA)**
+
+Akurasi: 80.39% (Sedikit lebih baik dari regresi logistik)
+
+Sensitivitas: 85.91% (Lebih baik dalam mendeteksi kelas positif)
+
+Spesifisitas: 71.53% (Sedikit lebih rendah dari regresi logistik)
+
+Kelebihan: Performa sedikit lebih baik dari regresi logistik dalam dataset Titanic mungkin karena bisa menangani hubungan antar variabel sedikit lebih baik.
+
+Kekurangan: Tidak bekerja optimal jika ada hubungan non-linier antar variabel.
+
+### **Quadratic Discriminant Analysis (QDA)**
+
+Akurasi: 81.79% (Tertinggi di antara semua model)
+
+Sensitivitas: 86.14% (Bagus)
+
+Spesifisitas: 74.82% (Paling tinggi)
+
+Kelebihan: Menghasilkan akurasi tertinggi (81.79%) dan spesifisitas terbaik (74.82%) yang berarti bahwa model ini lebih baik dalam mengenali penumpang yang tidak selamat. Berbeda dengan LDA, QDA tidak mengasumsikan bahwa kelas memiliki varians yang sama, sehingga bekerja lebih baik untuk dataset Titanic yang memiliki variabel dengan skala yang berbeda.
+
+Kekurangan: Rentan terhadap overfitting jika jumlah data terbatas atau jika ada banyak fitur. Membutuhkan lebih banyak data dibandingkan LDA agar distribusi kelas bisa dipelajari dengan baik.
+
+### **Naive Bayes**
+
+Akurasi: 78.71% (Paling rendah)
+
+Sensitivitas: 80.91% (Kurang baik dalam menangkap kelas positif)
+
+Spesifisitas: 75.18% (Cukup baik)
+
+Kelebihan: Model ini cepat dan efisien untuk dataset besar dan dapat menghasilkan spesifisitas cukup baik (75.18%) yang berarti bahwa model ini dapat mengidentifikasi penumpang yang tidak selamat dengan cukup baik.
+
+Kekurangan: Akurasinya lebih rendah dibandingkan model lain (78.71%) yang berarti bahwa model ini tidak sebaik model lainnya dalam memprediksi keselamatan penumpang.
+
+### **K-Nearest Neighbors (KNN) dengan K = 5**
+
+Akurasi: 81.23% (Cukup tinggi)
+
+Sensitivitas: 88.41% (Tertinggi, sangat baik dalam menangkap kelas positif)
+
+Spesifisitas: 69.71% (Paling rendah)
+
+Kelebihan: Sensitivitas tertinggi (88.41%) yang berarti bahwa model ini sangat baik dalam mengidentifikasi penumpang yang selamat.
+
+Kekurangan: Spesifisitas terendah (69.71%) yang berarti bahwa model ini kurang baik dalam mengenali penumpang yang tidak selamat.
+
+# **Kesimpulan Akhir**
+
+Berdasarkan hasil analisis performa model dapat disimpulkan bahwa metode terbaik untuk memprediksi apakah seseorang selamat atau tidak selamat pada dataset Titanic adalah Quadratic Discriminant Analysis (QDA) karena QDA memiliki akurasi tertinggi (81.79%) yang berarti bahwa model ini dapat memprediksi apakah seseorang selamat atau tidak selamat itu memiliki kesalahan paling sedikit dibandingkan metode lain, selain itu model ini memiliki keseimbangan terbaik antara akurasi dan spesifisitas.
